@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
+from datetime import datetime, time, date
 
 # Carichiamo le variabili d'ambiente dal file .env
 load_dotenv()
@@ -42,7 +43,7 @@ def connect_to_airtable():
     }
     
     records = []
-    offset = None  # Variabile per tracciare l'offset per la paginazione
+    offset = None
     
     while True:
         params = {}
@@ -53,42 +54,33 @@ def connect_to_airtable():
 
         if response.status_code == 200:
             data = response.json()
-            
-            # Aggiungiamo l'ID di ogni record ai dati
             for record in data.get('records', []):
                 fields = record['fields']
-                fields['id'] = record['id']  # Aggiungiamo l'ID del record
+                fields['id'] = record['id']
                 records.append(fields)
-            
-            # Controlla se c'è un offset per la prossima pagina
             offset = data.get('offset', None)
-            
-            # Se non ci sono più pagine da recuperare, esci dal ciclo
             if not offset:
                 break
         else:
             st.error(f"Errore nel recupero dei dati da Airtable: {response.status_code}")
             return None
     
-    # Convertiamo i record in un DataFrame Pandas
     df = pd.DataFrame(records)
-
-    # Filtro per "App. Fissato"
     df = df[df['Esito telefonata'] == 'App. Fissato']
 
-    # Assicuriamoci che le colonne 'Presentato/a?' e 'Importo pagato' siano presenti, anche se vuote
-    df['Presentato/a?'] = df.get('Presentato/a?', False)  # Predefinito False
-    df['Importo pagato'] = df.get('Importo pagato', 0.0)  # Predefinito 0.0
-    
-    # Selezioniamo solo le colonne specificate in 'view_columns'
-    return df[view_columns + ['id']]  # Includiamo l'ID per l'aggiornamento
+    df['Presentato/a?'] = df.get('Presentato/a?', False)
+    df['Importo pagato'] = df.get('Importo pagato', 0.0)
 
-# Funzione per gestire il login
+    df['Data e ora appuntamento'] = pd.to_datetime(df['Data e ora appuntamento'], errors='coerce').dt.strftime('%d-%m-%Y alle ore %H:%M')
+
+    return df
+
+# Funzione per il login
 def login(username, password):
     if username in CREDENZIALI and CREDENZIALI[username]['password'] == password:
         st.session_state['username'] = username
         st.session_state['istituto'] = CREDENZIALI[username]['istituto']
-        st.success(f"Benvenuto, {username}. Istituto: {st.session_state['istituto']}")
+        st.success(f"Benvenuto, Istituto: {st.session_state['istituto']}")
         return True
     else:
         st.error("Username o password non corretti")
@@ -102,8 +94,23 @@ def update_airtable_record(record_id, updated_fields):
         "Content-Type": "application/json"
     }
 
+    valid_modalita_acconto = ["Carta", "Contanti", "Pagodil"]
+
+    if 'ModalitàPagamentoAcc.' in updated_fields:
+        if updated_fields['ModalitàPagamentoAcc.'] not in valid_modalita_acconto:
+            st.error(f"Errore: '{updated_fields['ModalitàPagamentoAcc.']}' non è un'opzione valida.")
+            return
+
+    if 'Data AppRifissato' in updated_fields:
+        if isinstance(updated_fields['Data AppRifissato'], (datetime, date)):
+            if isinstance(updated_fields['Data AppRifissato'], date) and not isinstance(updated_fields['Data AppRifissato'], datetime):
+                updated_fields['Data AppRifissato'] = datetime.combine(updated_fields['Data AppRifissato'], datetime.min.time())
+
+            updated_fields['Data AppRifissato'] = updated_fields['Data AppRifissato'].isoformat() + 'Z'
+
     data = {
-        "fields": updated_fields
+        "fields": updated_fields,
+        "typecast": True
     }
 
     response = requests.patch(url, json=data, headers=headers)
@@ -117,7 +124,6 @@ def update_airtable_record(record_id, updated_fields):
 def app():
     st.title("Dama Point | Gestione outcome appuntamento")
 
-    # Se l'utente non è loggato, mostriamo il modulo di login
     if 'username' not in st.session_state:
         st.subheader("Effettua il login")
         username = st.text_input("Username")
@@ -125,75 +131,142 @@ def app():
         if st.button("Login"):
             login(username, password)
 
-    # Se l'utente è loggato, mostriamo i dati
     if 'username' in st.session_state:
         istituto_utente = st.session_state['istituto']
 
-        # Ottieni i dati da Airtable
         df = connect_to_airtable()
 
         if df is not None:
-            # Filtra i dati in base all'istituto di appartenenza dell'utente
             df_filtered = df[df['Istituto di origine'] == istituto_utente]
 
-            # Barra di ricerca per nome o cognome
             search_query = st.text_input("Cerca cliente per Nome o Cognome")
 
-            # Filtriamo i dati in base alla ricerca e all'istituto
             if search_query:
                 filtered_df = df_filtered[df_filtered['Nome'].str.contains(search_query, case=False) | df_filtered['Cognome'].str.contains(search_query, case=False)]
             else:
                 filtered_df = df_filtered
 
             if not filtered_df.empty:
-                st.write(f"**{len(filtered_df)} CLIENTI TROVATI PER {istituto_utente}:**")
+                st.write(f"**{len(filtered_df)} Clienti trovati per {istituto_utente}:**")
 
-                # Mostra i clienti trovati con le colonne "Nome", "Cognome", "Servizio richiesto", e "Telefono"
+                modalita_pagamento_acc_options = ["Carta", "Contanti", "Pagodil"]
+                operatrice_consulenza_options = [
+                    "Anna Maiello", "Luana Montano", "Angela Capillari", "Claudia Monaco", "Carmen Nugnes",
+                    "Anna Marchese", "Ilaria Formisano", "Serena De falco", "Pariota Ilaria", "Roberta Vicidomini",
+                    "Sara Fraj", "Annamaria Del Mastro", "Carla Pellone", "Giusy De Paola", "Ilenia Paolini",
+                    "Martina Pierri", "Nunzia Braca", "Ginevra Barrella", "Monica Di Lauro", "Gabriella Apicella",
+                    "Fanny Alfano", "Sara Frojo", "Veronica Errico", "Carmela Montanino", "Ylenia Esposito",
+                    "Ortensia Balestrieri", "Luisa Pisacane", "Scala Alessia", "Carolina Piacente", "Maria Pia Vitale",
+                    "Alessia Vitale", "Rossella Moccia", "Maria Teresa Regina", "Marica Faiella", "Giovanna Strollo",
+                    "Antonia Passamato", "Roberta Boffa", "Carmela De Riggi", "Fenizia DI Fiore", "D'Ambrosio Filomena"
+                ]
+
                 for index, row in filtered_df.iterrows():
-                    st.write(f"**{row['Nome']} {row['Cognome']}**")
-                    st.write(f"Servizio richiesto: {row['Servizio richiesto']}")
-                    st.write(f"Telefono: {row['Telefono']}")
+                    with st.expander(f"{row['Nome']} {row['Cognome']}"):
+                        with st.form(key=f"form_{index}"):
 
-                    # Inizializza i valori di session state solo se non sono già presenti
-                    if f"presentato_{index}" not in st.session_state:
-                        st.session_state[f"presentato_{index}"] = row['Presentato/a?']
+                            st.write(f"Servizio richiesto: {row['Servizio richiesto']}")
+                            st.write(f"Telefono: {row['Telefono']}")
+                            st.write(f"Data e ora consulenza: {row['Data e ora appuntamento']}")
+                            st.write(f"Operatrice consulenza assegnata: {row['Operatrice']}")
 
-                    if f"importo_{index}" not in st.session_state:
-                        st.session_state[f"importo_{index}"] = row['Importo pagato']
+                            if f"presentato_{index}" not in st.session_state:
+                                st.session_state[f"presentato_{index}"] = row['Presentato/a?']
 
-                    # Creiamo un form per impedire l'esecuzione automatica del codice
-                    with st.form(key=f"form_{index}"):
-                        # Non modifichiamo session_state, usiamo direttamente il valore
-                        col1, col2 = st.columns(2)
+                            if f"importo_{index}" not in st.session_state:
+                                st.session_state[f"importo_{index}"] = row['Importo pagato']
 
-                        # Valore iniziale del checkbox e del numero di input preso dallo stato della sessione
-                        presentato_a = col1.checkbox("Presentato/a?", value=st.session_state[f"presentato_{index}"], key=f"presentato_{index}_widget")
-                        importo_pagato = col2.number_input("Importo pagato", min_value=0.0, value=st.session_state[f"importo_{index}"], key=f"importo_{index}_widget")
+                            if f"followup_{index}" not in st.session_state:
+                                st.session_state[f"followup_{index}"] = "No"
 
-                        # Pulsante per inviare il form e aggiornare i dati
-                        submit_button = st.form_submit_button(f"Aggiorna {row['Nome']} {row['Cognome']}")
+                            if f"data_followup_{index}" not in st.session_state:
+                                st.session_state[f"data_followup_{index}"] = None
 
-                        if submit_button:
-                            # Aggiorna lo stato della sessione solo quando viene cliccato il pulsante "Aggiorna"
-                            st.session_state[f"presentato_{index}"] = presentato_a
-                            st.session_state[f"importo_{index}"] = importo_pagato
+                            if f"acconto_importo_{index}" not in st.session_state:
+                                st.session_state[f"acconto_importo_{index}"] = 0.0
 
-                            # Prepara il dizionario con i campi aggiornati
-                            updated_fields = {
-                                'Presentato/a?': st.session_state[f"presentato_{index}"],
-                                'Importo pagato': st.session_state[f"importo_{index}"]
-                            }
+                            if f"modalita_acconto_{index}" not in st.session_state:
+                                st.session_state[f"modalita_acconto_{index}"] = modalita_pagamento_acc_options[0]  # Predefinisci "Carta"
 
-                            # Usa l'ID del record per aggiornare i dati in Airtable
-                            record_id = row['id']
-                            update_airtable_record(record_id, updated_fields)
+                            if f"modalita_saldo_{index}" not in st.session_state:
+                                st.session_state[f"modalita_saldo_{index}"] = None
 
-                        # Aggiungiamo una linea divisoria tra un cliente e l'altro
-                        st.divider()
-            else:
-                st.write("Nessun cliente trovato.")
-        else:
-            st.write("Nessun record trovato.")
+                            if f"operatrice_svolta_{index}" not in st.session_state:
+                                st.session_state[f"operatrice_svolta_{index}"] = None
+
+                            col1, col2 = st.columns(2)
+
+                            presentato_a = col1.checkbox("Presentato/a?", value=st.session_state[f"presentato_{index}"], key=f"presentato_{index}_widget")
+                            importo_pagato = col2.number_input("Importo pagato", min_value=0.0, value=st.session_state[f"importo_{index}"], key=f"importo_{index}_widget")
+                            
+                            follow_up = st.selectbox("Follow up?", ["No", "Si"], index=0, key=f"followup_{index}_widget")
+                            data_followup = st.date_input("Data follow up", value=None, key=f"data_followup_{index}_widget")
+                            ora_followup = st.time_input("Ora follow up", value=None, key=f"ora_followup_{index}_widget")  # Nessun orario predefinito
+
+                            # Importo acconto senza preimpostazione
+                            acconto_importo = st.number_input("Importo acconto", min_value=0.0, value=None, key=f"acconto_importo_{index}_widget")
+
+                            # Modalità pagamento senza preimpostazione
+                            modalita_acconto = st.selectbox("Modalità pagamento acconto", ["", "Carta", "Contanti", "Pagodil"], key=f"modalita_acconto_{index}_widget")
+                            modalita_saldo = st.selectbox("Modalità pagamento saldo", ["", 'Contanti', 'Carta di credito', 'Pagodil'], key=f"modalita_saldo_{index}_widget")
+
+                            # Operatrice senza preimpostazione
+                            operatrice_svolta = st.selectbox("Nome operatrice consulenza svolta", [""] + operatrice_consulenza_options, key=f"operatrice_svolta_{index}_widget")
+
+                            # Bottone per aggiornare
+                            submit_button = st.form_submit_button(f"Aggiorna {row['Nome']} {row['Cognome']}")
+
+                            if submit_button:
+                                st.session_state[f"presentato_{index}"] = presentato_a
+                                st.session_state[f"importo_{index}"] = importo_pagato
+
+                                datetime_followup = datetime.combine(data_followup, ora_followup)
+
+                                st.session_state[f"data_followup_{index}"] = datetime_followup
+                                st.session_state[f"acconto_importo_{index}"] = acconto_importo
+                                st.session_state[f"modalita_acconto_{index}"] = modalita_acconto
+                                st.session_state[f"modalita_saldo_{index}"] = modalita_saldo
+                                st.session_state[f"operatrice_svolta_{index}"] = operatrice_svolta
+
+                                updated_fields = {
+                                    'Presentato/a?': st.session_state[f"presentato_{index}"],
+                                    'Importo pagato': st.session_state[f"importo_{index}"],
+                                    'Importo Acconto': st.session_state[f"acconto_importo_{index}"],
+                                    'ModalitàPagamentoAcc.': st.session_state[f"modalita_acconto_{index}"],
+                                    'OperatriceConsulenza': st.session_state[f"operatrice_svolta_{index}"],
+                                    'ModalitàPagamentoMain': st.session_state[f"modalita_saldo_{index}"],
+                                    'AppRifissato': follow_up  # Aggiorna AppRifissato con il valore di Follow up
+                                }
+                                
+                                if st.session_state[f"presentato_{index}"] is not None:
+                                    updated_fields['Presentato/a?'] = st.session_state[f"presentato_{index}"]
+
+                                if st.session_state[f"importo_{index}"] is not None:
+                                    updated_fields['Importo pagato'] = st.session_state[f"importo_{index}"]
+
+                                if acconto_importo is not None:
+                                    updated_fields['Importo Acconto'] = acconto_importo
+
+                                if modalita_acconto != "":
+                                    updated_fields['ModalitàPagamentoAcc.'] = modalita_acconto
+
+                                if modalita_saldo != "":
+                                    updated_fields['ModalitàPagamentoMain'] = modalita_saldo
+
+                                if operatrice_svolta != "":
+                                    updated_fields['OperatriceConsulenza'] = operatrice_svolta
+
+                                if follow_up:
+                                    updated_fields['AppRifissato'] = follow_up  # Valore "Si" o "No" da aggiornare
+
+                                # Se l'utente ha inserito una data di follow-up, aggiorna anche quella
+                                if data_followup is not None and ora_followup is not None:
+                                    datetime_followup = datetime.combine(data_followup, ora_followup)
+                                    updated_fields['Data AppRifissato'] = datetime_followup.isoformat() + 'Z'
+                                record_id = row['id']
+                                update_airtable_record(record_id, updated_fields)
+
+                            st.divider()
 
 if __name__ == "__main__":
     app()
