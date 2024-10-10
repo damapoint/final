@@ -96,9 +96,9 @@ def update_airtable_record(record_id, updated_fields):
 
     valid_modalita_acconto = ["Carta", "Contanti", "Pagodil"]
 
-    if 'ModalitàPagamentoAcc.' in updated_fields:
-        if updated_fields['ModalitàPagamentoAcc.'] not in valid_modalita_acconto:
-            st.error(f"Errore: '{updated_fields['ModalitàPagamentoAcc.']}' non è un'opzione valida.")
+    if 'ModalitàPagamentoAcc. copy' in updated_fields:
+        if updated_fields['ModalitàPagamentoAcc. copy'] not in valid_modalita_acconto:
+            st.error(f"Errore: '{updated_fields['ModalitàPagamentoAcc. copy']}' non è un'opzione valida.")
             return
 
     if 'Data AppRifissato' in updated_fields:
@@ -206,9 +206,13 @@ def app():
                             # Importo acconto senza preimpostazione
                             acconto_importo = st.number_input("Importo acconto", min_value=0.0, value=None, key=f"acconto_importo_{index}_widget")
 
-                            # Modalità pagamento senza preimpostazione
-                            modalita_acconto = st.selectbox("Modalità pagamento acconto", ["", "Carta", "Contanti", "Pagodil"], key=f"modalita_acconto_{index}_widget")
-                            modalita_saldo = st.selectbox("Modalità pagamento saldo", ["", 'Contanti', 'Carta di credito', 'Pagodil'], key=f"modalita_saldo_{index}_widget")
+                            # Opzioni di pagamento allineate per Acconto e Saldo
+                            modalita_pagamento_options = ["Carta", "Contanti", "Pagodil"]
+
+                            # Modalità pagamento acconto
+                            modalita_acconto = st.selectbox("Modalità pagamento acconto", [""] + modalita_pagamento_options, key=f"modalita_acconto_{index}_widget")
+                            modalita_saldo = st.selectbox("Modalità pagamento saldo", [""] + modalita_pagamento_options, key=f"modalita_saldo_{index}_widget")
+
 
                             # Operatrice senza preimpostazione
                             operatrice_svolta = st.selectbox("Nome operatrice consulenza svolta", [""] + operatrice_consulenza_options, key=f"operatrice_svolta_{index}_widget")
@@ -220,51 +224,53 @@ def app():
                                 st.session_state[f"presentato_{index}"] = presentato_a
                                 st.session_state[f"importo_{index}"] = importo_pagato
 
-                                datetime_followup = datetime.combine(data_followup, ora_followup)
-
-                                st.session_state[f"data_followup_{index}"] = datetime_followup
+                                st.session_state[f"data_followup_{index}"] = data_followup
                                 st.session_state[f"acconto_importo_{index}"] = acconto_importo
                                 st.session_state[f"modalita_acconto_{index}"] = modalita_acconto
                                 st.session_state[f"modalita_saldo_{index}"] = modalita_saldo
                                 st.session_state[f"operatrice_svolta_{index}"] = operatrice_svolta
 
-                                updated_fields = {
-                                    'Presentato/a?': st.session_state[f"presentato_{index}"],
-                                    'Importo pagato': st.session_state[f"importo_{index}"],
-                                    'Importo Acconto': st.session_state[f"acconto_importo_{index}"],
-                                    'ModalitàPagamentoAcc.': st.session_state[f"modalita_acconto_{index}"],
-                                    'OperatriceConsulenza': st.session_state[f"operatrice_svolta_{index}"],
-                                    'ModalitàPagamentoMain': st.session_state[f"modalita_saldo_{index}"],
-                                    'AppRifissato': follow_up  # Aggiorna AppRifissato con il valore di Follow up
-                                }
-                                
-                                if st.session_state[f"presentato_{index}"] is not None:
-                                    updated_fields['Presentato/a?'] = st.session_state[f"presentato_{index}"]
+                                # Aggiorniamo solo i campi che non sono vuoti o non predefiniti
+                                updated_fields = {}
 
-                                if st.session_state[f"importo_{index}"] is not None:
-                                    updated_fields['Importo pagato'] = st.session_state[f"importo_{index}"]
+                                if presentato_a is not None:
+                                    updated_fields['Presentato/a?'] = presentato_a
+
+                                if importo_pagato is not None:
+                                    updated_fields['Importo pagato'] = importo_pagato
 
                                 if acconto_importo is not None:
                                     updated_fields['Importo Acconto'] = acconto_importo
 
-                                if modalita_acconto != "":
-                                    updated_fields['ModalitàPagamentoAcc.'] = modalita_acconto
+                                if modalita_acconto and modalita_acconto in ["Carta", "Contanti", "Pagodil"]:
+                                    updated_fields['ModalitàPagamentoAcc. copy'] = modalita_acconto
 
-                                if modalita_saldo != "":
+                                if modalita_saldo and modalita_saldo in ["Carta", "Contanti", "Pagodil"]:
                                     updated_fields['ModalitàPagamentoMain'] = modalita_saldo
 
-                                if operatrice_svolta != "":
+                                if operatrice_svolta:
                                     updated_fields['OperatriceConsulenza'] = operatrice_svolta
 
                                 if follow_up:
                                     updated_fields['AppRifissato'] = follow_up  # Valore "Si" o "No" da aggiornare
 
-                                # Se l'utente ha inserito una data di follow-up, aggiorna anche quella
-                                if data_followup is not None and ora_followup is not None:
+                                # Se l'utente ha inserito sia la data che l'ora di follow-up, aggiorna il campo "Data AppRifissato"
+                                if data_followup and ora_followup:
                                     datetime_followup = datetime.combine(data_followup, ora_followup)
                                     updated_fields['Data AppRifissato'] = datetime_followup.isoformat() + 'Z'
+
+                                # Ottieni l'ID del record da aggiornare
                                 record_id = row['id']
-                                update_airtable_record(record_id, updated_fields)
+
+                                # Effettua l'aggiornamento su Airtable se ci sono campi modificati
+                                if updated_fields:
+                                    update_airtable_record(record_id, updated_fields)
+                                else:
+                                    st.info("Non ci sono modifiche da salvare.")
+
+
+
+
 
                             st.divider()
 
