@@ -4,6 +4,8 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 from datetime import datetime, time, date
+import math
+
 
 # Carichiamo le variabili d'ambiente dal file .env
 load_dotenv()
@@ -12,6 +14,14 @@ load_dotenv()
 AIRTABLE_API_KEY = "patVvkwrcLfpSQFlN.6284937647e50b10895d44cd1c0829a183bfd24d488be47ca84c9538f90938e3"
 BASE_ID = 'appGyD33GmhodfxlW'  # Il tuo Base ID
 TABLE_ID = 'tblCPYQNiEie2tEyy'  # ID della tua tabella LEADS NUOVI
+
+# Definiamo le opzioni per "Motivi"
+MOTIVI_OPTIONS = [
+    "Problemi personali",
+    "Non è più interessato/a",
+    "Ha cambiato idea",
+    "Richiamerà per un nuovo appuntamento"
+]
 
 # Definiamo le colonne che vogliamo visualizzare
 view_columns = ['Nome', 'Cognome', 'Servizio richiesto', 'Telefono', 'Istituto di origine', 'Presentato/a?', 'Importo pagato']
@@ -170,11 +180,11 @@ def app():
                             st.write(f"Data e ora consulenza: {row['Data e ora appuntamento']}")
                             st.write(f"Operatrice consulenza assegnata: {row['Operatrice']}")
 
-                            if f"presentato_{index}" not in st.session_state:
-                                st.session_state[f"presentato_{index}"] = row['Presentato/a?']
-
+                            # Inizializzazione dello stato se non esiste
                             if f"importo_{index}" not in st.session_state:
                                 st.session_state[f"importo_{index}"] = row['Importo pagato']
+                            if f"presentato_{index}" not in st.session_state:
+                                st.session_state[f"presentato_{index}"] = row['Presentato/a?']
 
                             if f"followup_{index}" not in st.session_state:
                                 st.session_state[f"followup_{index}"] = "No"
@@ -194,28 +204,24 @@ def app():
                             if f"operatrice_svolta_{index}" not in st.session_state:
                                 st.session_state[f"operatrice_svolta_{index}"] = None
 
+                            # Creazione delle colonne e campi del form
                             col1, col2 = st.columns(2)
 
+                            # Widget del form
                             presentato_a = col1.checkbox("Presentato/a?", value=st.session_state[f"presentato_{index}"], key=f"presentato_{index}_widget")
-                            importo_pagato = col2.number_input("Importo pagato", min_value=0.0, value=st.session_state[f"importo_{index}"], key=f"importo_{index}_widget")
-                            
-                            follow_up = st.selectbox("Follow up?", ["No", "Si"], index=0, key=f"followup_{index}_widget")
-                            data_followup = st.date_input("Data follow up", value=None, key=f"data_followup_{index}_widget")
-                            ora_followup = st.time_input("Ora follow up", value=None, key=f"ora_followup_{index}_widget")  # Nessun orario predefinito
+                            motivi = st.multiselect("Motivo (se non presentato/a)", MOTIVI_OPTIONS, key=f"motivi_{index}_widget")
 
-                            # Importo acconto senza preimpostazione
-                            acconto_importo = st.number_input("Importo acconto", min_value=0.0, value=None, key=f"acconto_importo_{index}_widget")
-
-                            # Opzioni di pagamento allineate per Acconto e Saldo
+                            # Singolo widget 'operatrice_svolta' (duplicato rimosso)
+                            operatrice_svolta = st.selectbox("Nome operatrice consulenza svolta", [""] + operatrice_consulenza_options, key=f"operatrice_svolta_{index}_widget")
                             modalita_pagamento_options = ["Carta", "Contanti", "Pagodil"]
-
-                            # Modalità pagamento acconto
+                            importo_pagato = col2.number_input("Importo pagato", min_value=0.0, value=st.session_state[f"importo_{index}"], key=f"importo_{index}_widget")
+                            acconto_importo = st.number_input("Importo acconto", min_value=0.0, value=None, key=f"acconto_importo_{index}_widget")
                             modalita_acconto = st.selectbox("Modalità pagamento acconto", [""] + modalita_pagamento_options, key=f"modalita_acconto_{index}_widget")
                             modalita_saldo = st.selectbox("Modalità pagamento saldo", [""] + modalita_pagamento_options, key=f"modalita_saldo_{index}_widget")
 
-
-                            # Operatrice senza preimpostazione
-                            operatrice_svolta = st.selectbox("Nome operatrice consulenza svolta", [""] + operatrice_consulenza_options, key=f"operatrice_svolta_{index}_widget")
+                            follow_up = st.selectbox("Rifissato?", ["No", "Si"], index=0, key=f"followup_{index}_widget")
+                            data_followup = st.date_input("Data rifissato", value=None, key=f"data_followup_{index}_widget")
+                            ora_followup = st.time_input("Ora rifissato", value=None, key=f"ora_followup_{index}_widget")
 
                             # Bottone per aggiornare
                             submit_button = st.form_submit_button(f"Aggiorna {row['Nome']} {row['Cognome']}")
@@ -223,7 +229,6 @@ def app():
                             if submit_button:
                                 st.session_state[f"presentato_{index}"] = presentato_a
                                 st.session_state[f"importo_{index}"] = importo_pagato
-
                                 st.session_state[f"data_followup_{index}"] = data_followup
                                 st.session_state[f"acconto_importo_{index}"] = acconto_importo
                                 st.session_state[f"modalita_acconto_{index}"] = modalita_acconto
@@ -236,8 +241,17 @@ def app():
                                 if presentato_a is not None:
                                     updated_fields['Presentato/a?'] = presentato_a
 
-                                if importo_pagato is not None:
+                                # Assicura che 'Motivi' sia sempre una lista, anche se non selezionato nulla
+                                if motivi is not None and len(motivi) > 0:
+                                    updated_fields['Motivi'] = motivi
+                                else:
+                                    updated_fields['Motivi'] = []  # Invia una lista vuota se non ci sono motivi selezionati
+
+                                # Se "Importo pagato" è vuoto, invia 0.0 oppure non aggiornare il campo
+                                if importo_pagato is not None and not math.isnan(importo_pagato):
                                     updated_fields['Importo pagato'] = importo_pagato
+                                else:
+                                    updated_fields['Importo pagato'] = 0.0  # oppure rimuovi questa riga se non vuoi inviare un valore predefinito
 
                                 if acconto_importo is not None:
                                     updated_fields['Importo Acconto'] = acconto_importo
@@ -267,10 +281,6 @@ def app():
                                     update_airtable_record(record_id, updated_fields)
                                 else:
                                     st.info("Non ci sono modifiche da salvare.")
-
-
-
-
 
                             st.divider()
 
