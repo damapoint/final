@@ -28,25 +28,23 @@ view_columns = ['Nome', 'Cognome', 'Servizio richiesto', 'Telefono', 'Istituto d
 
 # CREDENZIALI degli utenti con Istituto di origine associato
 CREDENZIALI = {
-    'damapoint1': {'password': 'dama321', 'istituto': 'DamaPoint - Nola, Via Circumvallazione 12/14'},
-    'damapoint2': {'password': 'dama321', 'istituto': 'DamaPoint - Vomero, Via Michele Kerbaker, 92'},
-    'damapoint3': {'password': 'dama321', 'istituto': 'DamaPoint - Nocera, Via Roma 70'},
-    'damapoint4': {'password': 'dama321', 'istituto': 'Damapoint - Castellammare, Via Roma 15'},
-    'damapoint5': {'password': 'dama321', 'istituto': 'DamaPoint - Torre Annunziata, C.so Umberto I 209'},
-    'damapoint6': {'password': 'dama321', 'istituto': 'DamaPoint - Cava De\' Tirreni, C.so Principe Amodeo 5'},
-    'damapoint7': {'password': 'dama321', 'istituto': 'DamaPoint - San Giuseppe Vesuviano, C.so Emanuele 16'},
-    'damapoint8': {'password': 'dama321', 'istituto': 'DamaPoint - Chiaia, Via Arcoleo 35'},
-    'damapoint9': {'password': 'dama321', 'istituto': 'DamaPoint - Battipaglia, Via Roma 52'},
-    'damapoint10': {'password': 'dama321', 'istituto': 'DamaPoint - Vomero, Via Kerbaker 92'},  # Duplicato Vomero, corretto
-    'damapoint11': {'password': 'dama321', 'istituto': 'DamaPoint - Portici, P.zzale Brunelleschi 21'},
-    'damapoint12': {'password': 'dama321', 'istituto': 'DamaPoint - Scafati, Corso Nazionale, 454'},
-    'damapoint13': {'password': 'dama321', 'istituto': 'DamaPoint - Benevento, C.so Vittore Emanuele III 24'},
-    'damapoint14': {'password': 'dama321', 'istituto': 'DamaPoint - Pomigliano, Via F. Terracciano 119'},
-    'damapoint15': {'password': 'dama321', 'istituto': 'DamaPoint - Salerno, Corso Giuseppe Garibaldi 217'},
-    'damapoint16': {'password': 'dama321', 'istituto': 'DamaPoint - San Giuseppe, Corso Vittorio Emanuele, 16'},
+    'damapoint1': {'password': 'dama333', 'istituto': 'Nola'},
+    'damapoint2': {'password': 'dama333', 'istituto': 'Vomero'},
+    'damapoint3': {'password': 'dama333', 'istituto': 'Nocera'},
+    'damapoint4': {'password': 'dama333', 'istituto': 'Castellammare'},
+    'damapoint5': {'password': 'dama333', 'istituto': 'Torre Annunziata'},
+    'damapoint6': {'password': 'dama333', 'istituto': 'Cava De’ Tirreni'},
+    'damapoint7': {'password': 'dama333', 'istituto': 'San Giuseppe'},
+    'damapoint8': {'password': 'dama333', 'istituto': 'Chiaia'},
+    'damapoint9': {'password': 'dama333', 'istituto': 'Battipaglia'},
+    'damapoint10': {'password': 'dama333', 'istituto': 'Pomigliano'},
+    'damapoint11': {'password': 'dama333', 'istituto': 'Portici'},
+    'damapoint12': {'password': 'dama333', 'istituto': 'Scafati'},
+    'damapoint13': {'password': 'dama333', 'istituto': 'Benevento'},
+    'damapoint14': {'password': 'dama333', 'istituto': 'Salerno'},
     # Aggiunte alcune varianti abbreviate trovate nei dati:
-    'damapoint17': {'password': 'dama321', 'istituto': 'nola'},
-    'damapoint18': {'password': 'dama321', 'istituto': 'Torre Annunziata'}
+    'damapoint17': {'password': 'dama333', 'istituto': 'nola'},
+    'damapoint18': {'password': 'dama333', 'istituto': 'Torre Annunziata'}
 }
 
 
@@ -154,14 +152,12 @@ def app():
 
         if df is not None:
 
-            
             # Normalizzazione dei valori per evitare problemi di spazi e maiuscole
             df['Istituto di origine'] = df['Istituto di origine'].str.strip().str.lower()
             istituto_utente = istituto_utente.strip().lower()
 
-
-            
-            df_filtered = df[df['Istituto di origine'] == istituto_utente]
+            # Cerca i lead associati all'istituto dell'utente (anche parziali)
+            df_filtered = df[df['Istituto di origine'].str.contains(istituto_utente, case=False, na=False)]
 
             search_query = st.text_input("Cerca cliente per Nome o Cognome")
 
