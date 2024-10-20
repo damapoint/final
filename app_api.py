@@ -24,7 +24,7 @@ MOTIVI_OPTIONS = [
 ]
 
 # Definiamo le colonne che vogliamo visualizzare
-view_columns = ['Nome', 'Cognome', 'Servizio richiesto', 'Telefono', 'Istituto di origine', 'Presentato/a?', 'Importo pagato']
+view_columns = ['Nome', 'Cognome', 'Servizio richiesto', 'Telefono', 'Istituto di origine', 'Presentato/a?', 'TOTALE']
 
 # CREDENZIALI degli utenti con Istituto di origine associato
 CREDENZIALI = {
@@ -83,7 +83,7 @@ def connect_to_airtable():
     df = df[df['Esito telefonata'] == 'App. Fissato']
 
     df['Presentato/a?'] = df.get('Presentato/a?', False)
-    df['Importo pagato'] = df.get('Importo pagato', 0.0)
+    df['TOTALE'] = df.get('TOTALE', 0.0)
 
     df['Data e ora appuntamento'] = pd.to_datetime(df['Data e ora appuntamento'], errors='coerce').dt.strftime('%d-%m-%Y alle ore %H:%M')
 
@@ -191,8 +191,7 @@ def app():
                             st.write(f"Operatrice consulenza assegnata: {row['Operatrice']}")
 
                             # Inizializzazione dello stato se non esiste
-                            if f"importo_{index}" not in st.session_state:
-                                st.session_state[f"importo_{index}"] = row['Importo pagato']
+                            st.write(f"Importo pagato totale: {row['TOTALE']}")  # Campo di sola visualizzazione
                             if f"presentato_{index}" not in st.session_state:
                                 st.session_state[f"presentato_{index}"] = row['Presentato/a?']
 
@@ -224,9 +223,11 @@ def app():
                             # Singolo widget 'operatrice_svolta' (duplicato rimosso)
                             operatrice_svolta = st.selectbox("Nome operatrice consulenza svolta", [""] + operatrice_consulenza_options, key=f"operatrice_svolta_{index}_widget")
                             modalita_pagamento_options = ["Carta", "Contanti", "Pagodil"]
-                            importo_pagato = col2.number_input("Importo pagato", min_value=0.0, value=st.session_state[f"importo_{index}"], key=f"importo_{index}_widget")
+                            
                             acconto_importo = st.number_input("Importo acconto", min_value=0.0, value=None, key=f"acconto_importo_{index}_widget")
                             modalita_acconto = st.selectbox("Modalità pagamento acconto", [""] + modalita_pagamento_options, key=f"modalita_acconto_{index}_widget")
+                            importo_saldo = st.number_input("Importo saldo", min_value=0.0, value=None, key=f"importo_saldo_{index}_widget")
+
                             modalita_saldo = st.selectbox("Modalità pagamento saldo", [""] + modalita_pagamento_options, key=f"modalita_saldo_{index}_widget")
 
                             follow_up = st.selectbox("Rifissato?", ["No", "Si"], index=0, key=f"followup_{index}_widget")
@@ -238,10 +239,11 @@ def app():
 
                             if submit_button:
                                 st.session_state[f"presentato_{index}"] = presentato_a
-                                st.session_state[f"importo_{index}"] = importo_pagato
+                                
                                 st.session_state[f"data_followup_{index}"] = data_followup
                                 st.session_state[f"acconto_importo_{index}"] = acconto_importo
                                 st.session_state[f"modalita_acconto_{index}"] = modalita_acconto
+                                st.session_state[f"importo_saldo_{index}"] = importo_saldo  
                                 st.session_state[f"modalita_saldo_{index}"] = modalita_saldo
                                 st.session_state[f"operatrice_svolta_{index}"] = operatrice_svolta
 
@@ -257,17 +259,16 @@ def app():
                                 else:
                                     updated_fields['Motivi'] = []  # Invia una lista vuota se non ci sono motivi selezionati
 
-                                # Se "Importo pagato" è vuoto, invia 0.0 oppure non aggiornare il campo
-                                if importo_pagato is not None and not math.isnan(importo_pagato):
-                                    updated_fields['Importo pagato'] = importo_pagato
-                                else:
-                                    updated_fields['Importo pagato'] = 0.0  # oppure rimuovi questa riga se non vuoi inviare un valore predefinito
+
 
                                 if acconto_importo is not None:
                                     updated_fields['Importo Acconto'] = acconto_importo
 
                                 if modalita_acconto and modalita_acconto in ["Carta", "Contanti", "Pagodil"]:
                                     updated_fields['ModalitàPagamentoAcc. copy'] = modalita_acconto
+
+                                if importo_saldo is not None:
+                                    updated_fields['Importo saldo'] = importo_saldo  # Aggiorna il campo Importo saldo
 
                                 if modalita_saldo and modalita_saldo in ["Carta", "Contanti", "Pagodil"]:
                                     updated_fields['ModalitàPagamentoMain'] = modalita_saldo
