@@ -188,7 +188,7 @@ def app():
                             st.write(f"Servizio richiesto: {row['Servizio richiesto']}")
                             st.write(f"Telefono: {row['Telefono']}")
                             st.write(f"Data e ora consulenza: {row['Data e ora appuntamento']}")
-                            st.write(f"Operatrice consulenza assegnata: {row['Operatrice']}")
+                            st.write(f"Operatrice consulenza assegnata: {row['OperatriceAssegnata']}")
 
                             # Inizializzazione dello stato se non esiste
                             st.write(f"Importo pagato totale: {row['TOTALE']}")  # Campo di sola visualizzazione
