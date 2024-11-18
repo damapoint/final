@@ -33,7 +33,7 @@ CREDENZIALI = {
     'damapoint3': {'password': 'dama333', 'istituto': 'Nocera'},
     'damapoint4': {'password': 'dama333', 'istituto': 'Castellammare'},
     'damapoint5': {'password': 'dama333', 'istituto': 'Torre Annunziata'},
-    'damapoint6': {'password': 'dama333', 'istituto': 'Cava De' Tirreni'},
+    'damapoint6': {'password': 'dama333', 'istituto': "Cava De' Tirreni"},
     'damapoint7': {'password': 'dama333', 'istituto': 'San Giuseppe'},
     'damapoint8': {'password': 'dama333', 'istituto': 'Chiaia'},
     'damapoint9': {'password': 'dama333', 'istituto': 'Battipaglia'},
